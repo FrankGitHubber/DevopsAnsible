@@ -11,66 +11,78 @@
     password: "{{ docker_hub_password }}"
 - name: create project directory
   file:
-    path: "{{home}}/student-list"
+    path: "{{home}}/fake-backend "
     state: directory
-- name: copy devops private key file
+- name: copy fake-backend private key file
   copy:
     content: '{{ github_private_key }}'
     dest: "{{home}}/.ssh/id_rsa"
     owner: centos
 
-- name: Retrieve stident-list addons source code
+- name: Retrieve fake-backend  addons source code
   git:
-    repo: "{{ student_list_source_repo  }}"
-    dest: "{{ home }}/student-list"
+    repo: "{{ fake-backend _source_repo  }}"
+    dest: "{{ home }}/fake-backend "
     accept_hostkey: yes
     force: yes
     recursive: no
     key_file: "{{ home }}/.ssh/id_rsa"
-    version: "{{ student_list_source_branch }}"
+    version: "{{ fake-backend_source_branch }}"
 
 - name: Build api image and push it to Docker Hub
   docker_image:
-    path: "{{ home }}/student-list/simple_api"
-    name: "{{ docker_hub_login }}/student-list-api"
+    path: "{{ home }}/fake-backend"
+    name: "{{ docker_hub_login }}/fake-backend-api"
     push: yes
-    tag: "{{student_list_docker_image_tag}}"
+    tag: "{{fake-backend_docker_image_tag}}"
 
 # docker network 
 
 - name: crete docker network to interconnect containers
   docker_network:
-    name: student-list_network 
+    name: fake-backend_network 
 
 # deploy api
 
 - name: Deploy api
   docker_container:
-    name: pozos-api 
-    hostname: pozos-api
-    image: "{{ docker_hub_login }}/student-list-api:{{student_list_docker_image_tag}}"
+    name: mysql:5.7
+    image: "{{ docker_hub_login }}/fake-backend-api:{{fake-backend_docker_image_tag}}"
     state: started
     volumes:
-      - "{{ home }}/student-list/simple_api/student_age.json:/data/student_age.json"
-    networks:
-      - name: student-list_network 
-    ports:
-      - "4000:5000"
+   #  - "{{ home }}/student-list/simple_api/student_age.json:/data/student_age.json"
+	  - mysql_config:/var/lib/mysql 
+	env:
+      - MYSQL_ROOT_PASSWORD=rootpwdfrank
+      - MYSQL_DATABASE=battleboat
+      - MYSQL_USER=battleuser
+      - MYSQL_PASSWORD=battlepass
+    restart: always
+     networks:
+     - name: fake-backend_network 
+ # ports:
+ #  - "4000:5000"
 
 # deploy frontend
 
 - name: Deploy frontend
   docker_container:
     name: frontend
-    image: php:apache
+    image: fake-backend:latest
     state: started
-    networks:
-      - name: student-list_network
+     networks:
+      - name: fake-backend_network
     volumes:
-      - "{{ home }}/student-list/website:/var/www/html"
+#      - "{{ home }}/student-list/website:/var/www/html"
+	  - ./static_files:/etc/backend/static
+	restart: always  
     env:
-      USERNAME: "toto"
-      PASSWORD: "python"
+     - DATABASE_HOST=dbfrank
+     - DATABASE_PORT=3306
+     - DATABASE_USER=battleuser
+     - DATABASE_PASSWORD=battlepass
+     - DATABASE_NAME=battleboat
     ports:
-      - "80:80"
-
+      - "8181:3000"
+  volumes:
+  mysql_config:    

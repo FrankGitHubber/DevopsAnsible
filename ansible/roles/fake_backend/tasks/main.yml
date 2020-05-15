@@ -1,0 +1,92 @@
+---
+
+# This playbook is used to deploy fake_backend application based on Docker
+
+# build and push builded images
+
+- name: Log into DockerHub
+  docker_login:
+    username: "{{docker_hub_login}}"
+    email: "{{ docker_hub_email }}"
+    password: "{{docker_hub_password}}"
+- name: create project directory
+  file:
+    path: "{{home}}/fake_backend "
+    state: directory
+- name: copy fake_backend private key file
+  copy:
+    content: '{{github_private_key}}'
+    dest: "{{home}}/.ssh/id_rsa"
+    owner: centos
+
+- name: Retrieve fake_backend  addons source code
+  git:
+    repo: "{{fake_backend_source_repo}}"
+    dest: "{{home}}/fake_backend "
+    accept_hostkey: yes
+    force: yes
+    recursive: no
+    key_file: "{{home}}/.ssh/id_rsa"
+    version: "{{fake_backend_source_branch}}"
+
+- name: Build api image and push it to Docker Hub
+  docker_image:
+    path: "{{home}}/fake_backend"
+    name: "{{docker_hub_login }}/fake_backend-api"
+    push: yes
+    tag: "{{fake_backend_docker_image_tag}}"
+
+# docker network
+
+- name: crete docker network to interconnect containers
+  docker_network:
+    name: fake_backend_network
+
+# deploy api
+
+- name: Deploy api
+  docker_container:
+    name: "dbfrank"
+    hostname: "dbfrank"
+    image: "mysql:5.7"
+    state: "started"
+    volumes:
+      - "{{ home }}/mysql_config:/var/lib/mysql"
+    
+    env:
+      MYSQL_ROOT_PASSWORD: rootpwdfrank
+      MYSQL_DATABASE: battleboat
+      MYSQL_USER: battleuser
+      MYSQL_PASSWORD: battlepass
+
+
+    restart_policy: "always"
+    networks:
+      - name: fake_backend_network
+
+# deploy frontend
+
+- name: Deploy frontend
+  docker_container:
+    name: frontend
+    image: "{{ docker_hub_login }}/fake_backend-api:{{fake_backend_docker_image_tag}}"
+    state: started
+    networks:
+      - name: fake_backend_network
+    volumes:
+      -"{{ home }}/fake_backend/battleboat:/etc/backend/static"
+#     -"{{ home }}/static_files:/etc/backend/static"
+    restart_policy: "always"
+    env:
+      DATABASE_HOST: "dbfrank"
+      DATABASE_PORT: "3306"
+      DATABASE_USER: "battleuser"
+      DATABASE_PASSWORD: "battlepass"
+      DATABASE_NAME: "battleboat"
+
+    ports:
+      - "8181:3000"
+    volumes:
+      - mysql_config
+
+
